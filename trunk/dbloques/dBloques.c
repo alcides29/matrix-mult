@@ -14,14 +14,18 @@
  ============================================================================
  */
 
-//#include "comun.h"
+#include "comun.h"
 #include <stdio.h>
 #include <string.h>
 #include "mpi.h"
 
-#define N 100                /* numero de filas/columnas de las matrices */
+//#define N 100
+#define MASTER 0               /* taskid of first task */
+#define FROM_MASTER 1          /* setting a message type */
+#define FROM_WORKER 2          /* setting a message type */
 
 int main(int argc, char* argv[]){
+
 	int	numtasks,              /* number of tasks in partition */
 		taskid,                /* a task identifier */
 		numworkers,            /* number of worker tasks */
@@ -38,7 +42,6 @@ int main(int argc, char* argv[]){
 			b[N][N],           /* matrix B to be multiplied */
 			c[N][N];           /* result matrix C */
 
-	/* initialize MPI */
 	rc = MPI_Init(&argc, &argv);
 	/* get the size of the process group */
 	rc|= MPI_Comm_size(MPI_COMM_WORLD, &numtasks);
@@ -63,62 +66,55 @@ int main(int argc, char* argv[]){
 	 		for (j=0; j<N; j++)
 	 			b[i][j]= i*j;
 
-	  /* send matrix data to the worker tasks */
-	     averow = N/numworkers;
-	     extra = N%numworkers;
-	     offset = 0;
-	     mtype = FROM_MASTER;
-	     for (dest=1; dest<=numworkers; dest++)
-	     {
-	       rows = (dest <= extra) ? averow+1 : averow;
-	       printf("   sending %d rows to task %d\n",rows,dest);
+	 	// send matrix data to the worker tasks
+	    averow = N/numworkers;
+	    extra = N%numworkers;	// obtiene las tareas restantes
+	    offset = 0;				// desplazamiento
+	    mtype = FROM_MASTER;
 
-	   /* indicate the offset value at which each process will begin */
-	  /* looking for data in matrix A                               */
-	       MPI_Send(&offset, 1, MPI_INT, dest, mtype, MPI_COMM_WORLD);
+	    for (dest=1; dest <= numworkers; dest++){
 
-	  /* send the number of rows each process is required to compute */
-	       MPI_Send(&rows, 1, MPI_INT, dest, mtype, MPI_COMM_WORLD);
+	    	rows = (dest <= extra) ? averow+1 : averow;
+	    	printf("   sending %d rows to task %d\n",rows,dest);
 
-	  /* send each process rows*N bits of data starting at offset */
+	    	// indicate the offset value at which each process will begin
+	    	/* looking for data in matrix A                               */
+	    	MPI_Send(&offset, 1, MPI_INT, dest, mtype, MPI_COMM_WORLD);
 
-	       MPI_Send(&a[offset][0], rows*N, MPI_DOUBLE, dest, mtype,
-	                MPI_COMM_WORLD);
+	    	/* send the number of rows each process is required to compute */
+	    	MPI_Send(&rows, 1, MPI_INT, dest, mtype, MPI_COMM_WORLD);
 
-	  /* send each process the matrix B */
+	    	/* send each process rows*N bits of data starting at offset */
+	    	MPI_Send(&a[offset][0], rows*N, MPI_DOUBLE, dest, mtype,
+	    			MPI_COMM_WORLD);
 
-	       MPI_Send(&b, N*N, MPI_DOUBLE, dest, mtype, MPI_COMM_WORLD);
-	         offset = offset + rows;
-	     }
+	    	/* send each process the matrix B */
+	    	MPI_Send(&b, N*N, MPI_DOUBLE, dest, mtype, MPI_COMM_WORLD);
+	        offset = offset + rows;
+	    }
 
-	  /* wait for results from all worker tasks */
-	     mtype = FROM_WORKER;
-	     for (i=1; i<=numworkers; i++)
-	     {
-	       source = i;
+	    /* wait for results from all worker tasks */
+	    mtype = FROM_WORKER;
+	    for (i=1; i<=numworkers; i++)
+	    {
+	    	source = i;
 
-	  /* recieve the offset value the sending process ended with */
-	       MPI_Recv(&offset, 1, MPI_INT, source, mtype, MPI_COMM_WORLD, &status);
+	    	/* recieve the offset value the sending process ended with */
+	    	MPI_Recv(&offset, 1, MPI_INT, source, mtype, MPI_COMM_WORLD, &status);
 
-	  /* receive the number of rows the sending process computed */
-	       MPI_Recv(&rows, 1, MPI_INT, source, mtype, MPI_COMM_WORLD, &status);
+	    	/* receive the number of rows the sending process computed */
+	    	MPI_Recv(&rows, 1, MPI_INT, source, mtype, MPI_COMM_WORLD, &status);
 
-	   /* receive the final values of matrix C starting at the */
-	  /* corresponding offset values                          */
-	       MPI_Recv(&c[offset][0], rows*N, MPI_DOUBLE, source, mtype, MPI_COMM_WORLD, &status);
-	     }
+	    	/* receive the final values of matrix C starting at the */
+	    	/* corresponding offset values                          */
+	    	MPI_Recv(&c[offset][0], rows*N, MPI_DOUBLE, source, mtype, MPI_COMM_WORLD, &status);
+	    }
 
-
-	  /* print results */
-	     printf("Primeras 30 filas de resultado matriz (C)\n");
-	     for (i=0; i<30; i++){
-	    	 printf("\n");
-
-	     	for (j=0; j<N; j++)
-	   			printf("%8.2f  ", matriz[i][j]);
-	   		}
-    		printf ("\n");
-	   }
+	    /* print results */
+	    printf("Primeras 30 filas de resultado matriz (C)\n");
+	    imprimirMatriz(c);
+    	printf ("\n");
+	}
 
 	/********************** worker task **********************/
 	if (taskid > MASTER){
@@ -159,5 +155,5 @@ int main(int argc, char* argv[]){
 	/* Finalize MPI */
 	MPI_Finalize();
 
-	return 0;
+	return (MPI_SUCCESS);
 }
