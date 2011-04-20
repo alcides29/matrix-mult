@@ -11,10 +11,12 @@
 #ifndef COMUN_H_
 #define COMUN_H_
 
-// Deberia generar los elementos de la matriz aleatoriamente
-void generarMatriz();
+#define N 100	// numero de filas/columnas de las matrices
 
-void imprimirMatriz(float *matriz, int longitud);
+// Deberia generar los elementos de la matriz aleatoriamente
+void generarMatriz(int a[N][N], int b[N][N]);
+
+void imprimirMatriz(int matriz[N][N]);
 
 // otras funciones
 
