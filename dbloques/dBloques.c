@@ -39,22 +39,20 @@ int main(int argc, char* argv[]){
 			c[N][N];           /* result matrix C */
 
 	/* initialize MPI */
-	rc = MPI_Init(&argc,&argv);
+	rc = MPI_Init(&argc, &argv);
 	/* get the size of the process group */
-	rc|= MPI_Comm_size(MPI_COMM_WORLD,&numtasks);
+	rc|= MPI_Comm_size(MPI_COMM_WORLD, &numtasks);
 	/* get the process ID number */
-	rc|= MPI_Comm_rank(MPI_COMM_WORLD,&taskid);
+	rc|= MPI_Comm_rank(MPI_COMM_WORLD, &taskid);
 
 	if (rc != 0)
 		printf ("error initializing MPI and obtaining task ID info\n");
 
 	numworkers = numtasks-1;  // = 3, ya que el lider no trabaja
 
-	  /********************** master task **********************/
-
-	   if (taskid == MASTER)
-	   {
-	     printf("Numero de trabajadores para las tareas = %d\n", numworkers);
+	/********************** master task **********************/
+	if (taskid == MASTER){
+		printf("Numero de trabajadores para las tareas = %d\n", numworkers);
 
 	     // aqui se generan las matrices
 	    for (i=0; i<N; i++)
@@ -65,11 +63,7 @@ int main(int argc, char* argv[]){
 	 		for (j=0; j<N; j++)
 	 			b[i][j]= i*j;
 
-
-	   /*--------------------------------------*/
 	  /* send matrix data to the worker tasks */
-	 /*--------------------------------------*/
-
 	     averow = N/numworkers;
 	     extra = N%numworkers;
 	     offset = 0;
@@ -126,46 +120,44 @@ int main(int argc, char* argv[]){
     		printf ("\n");
 	   }
 
-	  /********************** worker task **********************/
-	   if (taskid > MASTER)
-	   {
-	     mtype = FROM_MASTER;
+	/********************** worker task **********************/
+	if (taskid > MASTER){
+		mtype = FROM_MASTER;
 
-	   /* receive the initial offset position of the matrix at which */
-	  /* I will start                                               */
+		/* receive the initial offset position of the matrix at which */
+		/* I will start                                               */
 	    MPI_Recv(&offset, 1, MPI_INT, MASTER, mtype, MPI_COMM_WORLD, &status);
 
-	  /* receive the number of rows I am required to compute */
-	     MPI_Recv(&rows, 1, MPI_INT, MASTER, mtype, MPI_COMM_WORLD, &status);
+	    /* receive the number of rows I am required to compute */
+	    MPI_Recv(&rows, 1, MPI_INT, MASTER, mtype, MPI_COMM_WORLD, &status);
 
-	  /* receive the matrix A starting at offset */
-	     MPI_Recv(&a, rows*N, MPI_DOUBLE, MASTER, mtype, MPI_COMM_WORLD, &status);
+	    /* receive the matrix A starting at offset */
+	    MPI_Recv(&a, rows*N, MPI_DOUBLE, MASTER, mtype, MPI_COMM_WORLD, &status);
 
-	  /* receive the matrix B */
-	     MPI_Recv(&b, N*N, MPI_DOUBLE, MASTER, mtype, MPI_COMM_WORLD, &status);
+	    /* receive the matrix B */
+	    MPI_Recv(&b, N*N, MPI_DOUBLE, MASTER, mtype, MPI_COMM_WORLD, &status);
 
-	     // Guarda los resultados en la matriz C
-	     for (k=0; k<N; k++)
-	       for (i=0; i<rows; i++)
-	       {
-	         c[i][k] = 0.0;
-	         for (j=0; j<N; j++)
-	           c[i][k] = c[i][k] + a[i][j] * b[j][k];
-	       }
-	     mtype = FROM_WORKER;
+	    // Guarda los resultados en la matriz C
+	    for (k=0; k<N; k++)
+	    	for (i=0; i<rows; i++){
+	    		c[i][k] = 0.0;
+	    		for (j=0; j<N; j++)
+	    			c[i][k] = c[i][k] + a[i][j] * b[j][k];
+	    	}
+	    mtype = FROM_WORKER;
 
-	  /* send the offset value from which point I worked back to the master */
-	     MPI_Send(&offset, 1, MPI_INT, MASTER, mtype, MPI_COMM_WORLD);
+	    /* send the offset value from which point I worked back to the master */
+	    MPI_Send(&offset, 1, MPI_INT, MASTER, mtype, MPI_COMM_WORLD);
 
-	  /* send the number of rows I worked on back to the master */
-	     MPI_Send(&rows, 1, MPI_INT, MASTER, mtype, MPI_COMM_WORLD);
+	    /* send the number of rows I worked on back to the master */
+	    MPI_Send(&rows, 1, MPI_INT, MASTER, mtype, MPI_COMM_WORLD);
 
-	  /* send the final portion of C */
-	     MPI_Send(&c, rows*N, MPI_DOUBLE, MASTER, mtype, MPI_COMM_WORLD);
-	   }
+	    /* send the final portion of C */
+	    MPI_Send(&c, rows*N, MPI_DOUBLE, MASTER, mtype, MPI_COMM_WORLD);
+	}
 
-	  /* Finalize MPI */
-	   MPI_Finalize();
+	/* Finalize MPI */
+	MPI_Finalize();
 
 	return 0;
 }
