@@ -15,6 +15,7 @@
  */
 
 #include "comun.h"
+#include "dbloques.h"
 #include <stdio.h>
 #include <string.h>
 #include "mpi.h"
@@ -33,14 +34,21 @@ int main(int argc, char* argv[]){
 		dest,                  /* task id of message destination */
 		mtype,                 /* message type */
 		rows,                  /* rows of matrix A sent to each worker */
-		averow, extra, offset, /* determines rows sent to each worker */
+		cantSubBlock, extra,   /* determines rows sent to each worker */
+		despFil,			   // desplazamiento de filas
+		despCol,			   // desplazamiento de columnas
 		i, j, k, rc;           /* misc */
 	MPI_Status status ;   /* return status for receive */
 
 
-	int		a[N][N],           /* matrix A to be multiplied */
+	double	a[N][N],           /* matrix A to be multiplied */
 			b[N][N],           /* matrix B to be multiplied */
 			c[N][N];           /* result matrix C */
+
+	// reserva de espacio para las matrices
+	ptroA = malloc( sizeof (float) * N * N);
+	ptroB = malloc( sizeof (float) * N * N);
+	ptroC = malloc( sizeof (float) * N * N);
 
 	rc = MPI_Init(&argc, &argv);
 	/* get the size of the process group */
@@ -51,13 +59,13 @@ int main(int argc, char* argv[]){
 	if (rc != 0)
 		printf ("error initializing MPI and obtaining task ID info\n");
 
-	numworkers = numtasks-1;  // = 3, ya que el lider no trabaja
+	numworkers = numtasks;
 
 	/********************** master task **********************/
 	if (taskid == MASTER){
 		printf("Numero de trabajadores para las tareas = %d\n", numworkers);
 
-	     // aqui se generan las matrices
+	     /* aqui se generan las matrices */
 	    for (i=0; i<N; i++)
 	 		for (j=0; j<N; j++)
 	 			a[i][j]= i+j;
@@ -65,32 +73,46 @@ int main(int argc, char* argv[]){
 	 	for (i=0; i<N; i++)
 	 		for (j=0; j<N; j++)
 	 			b[i][j]= i*j;
+	 	/* fin de generacion de matrices */
+
+	 	/* Iniciamos la distribucion ciclica */
+	 	TamSubBlock = sqrt (N);
+	 	TamBlockProc = sqrt (numtasks);
+
+	 	int TamBuffer = N * TamSubBlock * 2;
 
 	 	// send matrix data to the worker tasks
-	    averow = N/numworkers;
-	    extra = N%numworkers;	// obtiene las tareas restantes
-	    offset = 0;				// desplazamiento
+	    cantSubBlock = TamSubBlock;
+	    extra = N % numworkers;	// obtiene las tareas restantes
+	    despFil = 0;				// desplazamiento
+	    despCol = 0;
 	    mtype = FROM_MASTER;
 
-	    for (dest=1; dest <= numworkers; dest++){
+	    for (dest=0; dest <= numworkers; dest++){
 
-	    	rows = (dest <= extra) ? averow+1 : averow;
-	    	printf("   sending %d rows to task %d\n",rows,dest);
+	    	rows = (dest <= extra) ? cantSubBlock+1 : cantSubBlock;
+	    	printf("enviando %d bloques al proceso %d\n", rows, dest);
 
-	    	// indicate the offset value at which each process will begin
+	    	// indicate the despFil value at which each process will begin
 	    	/* looking for data in matrix A                               */
-	    	MPI_Send(&offset, 1, MPI_INT, dest, mtype, MPI_COMM_WORLD);
+	    	MPI_Send(&despFil, 1, MPI_INT, dest, mtype, MPI_COMM_WORLD);
 
+	    	/*
+	    	 * Se debe enviar el numero de bloques
+	    	 */
 	    	/* send the number of rows each process is required to compute */
 	    	MPI_Send(&rows, 1, MPI_INT, dest, mtype, MPI_COMM_WORLD);
 
-	    	/* send each process rows*N bits of data starting at offset */
-	    	MPI_Send(&a[offset][0], rows*N, MPI_DOUBLE, dest, mtype,
-	    			MPI_COMM_WORLD);
+	    	/*
+	    	 * send each process rows*col bits of data starting at despFil &
+	    	 * despCol
+	    	 */
+	    	MPI_Send(&a[despFil][despCol], TamSubBlock*TamSubBlock, MPI_DOUBLE,
+	    			dest, mtype, MPI_COMM_WORLD);
 
 	    	/* send each process the matrix B */
 	    	MPI_Send(&b, N*N, MPI_DOUBLE, dest, mtype, MPI_COMM_WORLD);
-	        offset = offset + rows;
+	        despFil = despFil + rows;
 	    }
 
 	    /* wait for results from all worker tasks */
@@ -99,15 +121,15 @@ int main(int argc, char* argv[]){
 	    {
 	    	source = i;
 
-	    	/* recieve the offset value the sending process ended with */
-	    	MPI_Recv(&offset, 1, MPI_INT, source, mtype, MPI_COMM_WORLD, &status);
+	    	/* recieve the despFil value the sending process ended with */
+	    	MPI_Recv(&despFil, 1, MPI_INT, source, mtype, MPI_COMM_WORLD, &status);
 
 	    	/* receive the number of rows the sending process computed */
 	    	MPI_Recv(&rows, 1, MPI_INT, source, mtype, MPI_COMM_WORLD, &status);
 
 	    	/* receive the final values of matrix C starting at the */
-	    	/* corresponding offset values                          */
-	    	MPI_Recv(&c[offset][0], rows*N, MPI_DOUBLE, source, mtype, MPI_COMM_WORLD, &status);
+	    	/* corresponding despFil values                          */
+	    	MPI_Recv(&c[despFil][0], rows*N, MPI_DOUBLE, source, mtype, MPI_COMM_WORLD, &status);
 	    }
 
 	    /* print results */
@@ -120,14 +142,14 @@ int main(int argc, char* argv[]){
 	if (taskid > MASTER){
 		mtype = FROM_MASTER;
 
-		/* receive the initial offset position of the matrix at which */
+		/* receive the initial despFil position of the matrix at which */
 		/* I will start                                               */
-	    MPI_Recv(&offset, 1, MPI_INT, MASTER, mtype, MPI_COMM_WORLD, &status);
+	    MPI_Recv(&despFil, 1, MPI_INT, MASTER, mtype, MPI_COMM_WORLD, &status);
 
 	    /* receive the number of rows I am required to compute */
 	    MPI_Recv(&rows, 1, MPI_INT, MASTER, mtype, MPI_COMM_WORLD, &status);
 
-	    /* receive the matrix A starting at offset */
+	    /* receive the matrix A starting at despFil */
 	    MPI_Recv(&a, rows*N, MPI_DOUBLE, MASTER, mtype, MPI_COMM_WORLD, &status);
 
 	    /* receive the matrix B */
@@ -142,8 +164,8 @@ int main(int argc, char* argv[]){
 	    	}
 	    mtype = FROM_WORKER;
 
-	    /* send the offset value from which point I worked back to the master */
-	    MPI_Send(&offset, 1, MPI_INT, MASTER, mtype, MPI_COMM_WORLD);
+	    /* send the despFil value from which point I worked back to the master */
+	    MPI_Send(&despFil, 1, MPI_INT, MASTER, mtype, MPI_COMM_WORLD);
 
 	    /* send the number of rows I worked on back to the master */
 	    MPI_Send(&rows, 1, MPI_INT, MASTER, mtype, MPI_COMM_WORLD);

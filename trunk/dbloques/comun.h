@@ -13,10 +13,15 @@
 
 #define N 100	// numero de filas/columnas de las matrices
 
-// Deberia generar los elementos de la matriz aleatoriamente
-void generarMatriz(int a[N][N], int b[N][N]);
+// Variables globales
+float *ptroA;
+float *ptroB;
+float *ptroC;
 
-void imprimirMatriz(int matriz[N][N]);
+// Deberia generar los elementos de la matriz aleatoriamente
+void generarMatriz(double a[N][N], double b[N][N]);
+
+void imprimirMatriz(double matriz[N][N]);
 
 // otras funciones
 

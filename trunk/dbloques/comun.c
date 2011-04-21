@@ -7,7 +7,7 @@
 #include "comun.h"
 #include <stdio.h>
 
-void generarMatriz(int a[N][N], int b[N][N]) {
+void generarMatriz(double a[N][N], double b[N][N]) {
 	int i, j;
 
 	for (i=0; i<N; i++)
@@ -19,14 +19,14 @@ void generarMatriz(int a[N][N], int b[N][N]) {
 			b[i][j]= i*j;
 }
 
-void imprimirMatriz(int matriz[N][N]) {
+void imprimirMatriz(double matriz[N][N]) {
 	int i, j;
 
 	for (i=0; i<30; i++){
 		printf("\n");
 
 		for (j=0; j<N; j++)
-			printf("%8.2d  ", matriz[i][j]);
+			printf("%8.2f  ", matriz[i][j]);
 		}
 		printf ("\n");
 }
