@@ -13,6 +13,7 @@
  * Esto es igual a sqrt(N)
  */
 int TamSubBlock;
+int CantTareas;
 
 /**
  *  Tamanho de bloques asignado a los procesos
