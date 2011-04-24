@@ -8,6 +8,7 @@
 #ifndef DBLOQUES_H_
 #define DBLOQUES_H_
 
+#include <math.h>
 /**
  * Tamaño de bloques asignado a las tareas
  * Esto es igual a sqrt(N)

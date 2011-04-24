@@ -11,6 +11,11 @@
 #ifndef COMUN_H_
 #define COMUN_H_
 
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include "mpi.h"
+
 #define N 100	// numero de filas/columnas de las matrices
 
 // Variables globales
