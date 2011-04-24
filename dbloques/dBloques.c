@@ -16,11 +16,7 @@
 
 #include "comun.h"
 #include "dbloques.h"
-#include <stdio.h>
-#include <string.h>
-#include "mpi.h"
 
-//#define N 100
 #define MASTER 0               /* taskid of first task */
 #define FROM_MASTER 1          /* setting a message type */
 #define FROM_WORKER 2          /* setting a message type */
@@ -34,9 +30,9 @@ int main(int argc, char* argv[]){
 		dest,                  /* task id of message destination */
 		mtype,                 /* message type */
 		rows,                  /* rows of matrix A sent to each worker */
-		cantSubBlock, extra,   /* determines rows sent to each worker */
+		extra,   			   /* determines rows sent to each worker */
 		despFil,			   // desplazamiento de filas
-		despCol,			   // desplazamiento de columnas
+		tareasHechas,
 		i, j, k, rc;           /* misc */
 	MPI_Status status ;   /* return status for receive */
 
@@ -71,12 +67,46 @@ int main(int argc, char* argv[]){
 	 			b[i][j]= i*j;
 	 	/* fin de generacion de matrices */
 
-	 	//TODO Verificar las condiciones de matriz cuadrada
+	 	/*
+		 * Condiciones que se deben cumplir para la ejecución del algoritmo
+		 * 1. El tamanho N de la matriz debe ser cuadrado perfecto.
+		 * 2. La raiz cuadrada de la cantidad de procesos debe ser menor que
+		 *    TamSubBlock. Esto es: sqrt(numworkers) < sqrt(N).
+		 *    TamSubBlock será la raíz de N para tener el balalceo más preciso.
+		 * 3. P es el número de procesos, y debe ser cuadrado perfecto.
+		 *    Se admiten matrices para las cuales N % sqrt(P) != 0, solo que
+		 *    en ese caso se viola en cierta medida la restricción del
+		 *    particionamiento por bloque.
+		 */
+
+	 	// condicion 1
+		if (N % N != 0) {
+			printf("N no es cuadrado perfecto\n");
+			MPI_Finalize();
+			exit(EXIT_FAILURE);
+		}
+
+		// condicion 2
+		if (numworkers % numworkers != 0) {
+			printf("El numero de procesos no es cuadrado perfecto\n");
+			MPI_Finalize();
+			exit(EXIT_FAILURE);
+		}
+
+		// condicion 3
+		if (sqrt(numworkers) > sqrt(N)) {
+			printf("La raiz del numero de procesos no es menor o igual que la"
+					"raiz de N (%d, %f)\n", (int)sqrt(numworkers), sqrt(N));
+			MPI_Finalize();
+			exit(EXIT_FAILURE);
+		}
+
+		printf("Se verifican todas las condiciones para el algoritmo\n");
 
 	 	/* Iniciamos la distribucion ciclica */
 	 	TamSubBlock = sqrt (N);
-	 	CantTareas = cantSubBlock
-	 	TareasHechas = 0;
+	 	CantTareas = TamSubBlock;
+	 	tareasHechas = 0;
 	 	TamBlockProc = sqrt (numtasks);
 
 	 	// send matrix data to the worker tasks
@@ -84,7 +114,7 @@ int main(int argc, char* argv[]){
 	    despFil = 0;				// desplazamiento
 	    mtype = FROM_MASTER;
 
-	    while( TareasHechas != CantTareas){
+	    while( tareasHechas != CantTareas){
 
 			for (dest=0; dest <= numworkers; dest++){
 
