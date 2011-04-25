@@ -101,6 +101,22 @@ void verificarCondiciones(numworkers){
 	}
 }
 
+
+int calcularSaltoCol(int dest, int tareaEnviada){
+	int saltoCol;
+
+	if ( tareaEnviada < TamSubBlock ){
+		saltoCol = dest * TamSubBlock;
+	}else if( tareaEnviada % TamSubBlock == 0){
+		saltoCol = 0 * TamSubBlock;
+	}else{
+		saltoCol = dest * TamSubBlock;
+	}
+
+	return saltoCol;
+}
+
+
 int main(int argc, char* argv[]){
 
 	int	numtasks,              /* number of tasks in partition */
@@ -114,6 +130,8 @@ int main(int argc, char* argv[]){
 		despFil,			   // desplazamiento de filas
 		saltoCol,				// Control del salto de columna
 		tareaEnviada,
+		filaInicioA,
+		colInicioB,
 		i, j, k, rc;           /* misc */
 	MPI_Status status ;   /* return status for receive */
 
@@ -170,28 +188,26 @@ int main(int argc, char* argv[]){
 
 				if (dest == MASTER){
 					//TODO El MASTER ejecuta su parte.
+					// verifica que filas se le va a enviar
+					if( tareaEnviada % TamSubBlock == 0)
+						despFil = despFil + TamSubBlock;
+
+					// Guardamos los valores para procesarlos luego
+					filaInicioA = despFil;
+					colInicioB = calcularSaltoCol(dest, tareaEnviada);
+
 					tareaEnviada++;
 				}
 
 				// Sino le envia las tareas a los demas procesos.
 				else{
+
 					// verifica que filas se le va a enviar
 					if( tareaEnviada % TamSubBlock == 0)
 						despFil = despFil + TamSubBlock;
 
-					// Calculamos el salto de columna;
-					if ( tareaEnviada < TamSubBlock ){
-						saltoCol = dest * TamSubBlock;
-						printf( "saltoCol1: %d, \n", saltoCol);
-					}
-					else if( tareaEnviada % TamSubBlock == 0){
-						saltoCol = 0 * TamSubBlock;
-						printf( "saltoCol2: %d, \n", saltoCol);
-					}else{
-						saltoCol = dest * TamSubBlock;
-						printf( "saltoCol3: %d, \n", saltoCol);
-					}
-					// fin saltoCol
+					saltoCol = calcularSaltoCol(dest, tareaEnviada);
+
 
 					// indica el valor despFil en donde cada proceso empezara
 					// a mirar los datos en la matriz A
