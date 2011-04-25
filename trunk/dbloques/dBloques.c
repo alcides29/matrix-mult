@@ -107,10 +107,10 @@ int main(int argc, char* argv[]){
 		source,                /* task id of message source */
 		dest,                  /* task id of message destination */
 		mtype,                 /* message type */
-		rows,                  /* rows of matrix A sent to each worker */
-		extra,   			   /* determines rows sent to each worker */
+		//rows,                  /* rows of matrix A sent to each worker */
+		//extra,   			   /* determines rows sent to each worker */
 		despFil,			   // desplazamiento de filas
-		tareasHechas,
+		tareaEnviada,
 		i, j, k, rc;           /* misc */
 	MPI_Status status ;   /* return status for receive */
 
@@ -149,50 +149,50 @@ int main(int argc, char* argv[]){
 
 	 	/* Iniciamos la distribucion ciclica */
 	 	TamSubBlock = sqrt(N);
-	 	CantTareas = TamSubBlock;
-	 	tareasHechas = 0;
+	 	CantTareas = N;
+	 	tareaEnviada = 0;
 	 	//TamBlockProc = sqrt(numtasks);
 
 	 	// send matrix data to the worker tasks
-	    extra = N % numworkers;	// obtiene las tareas restantes
-	    despFil = 0;				// desplazamiento
+	    // extra = N % numworkers;	// obtiene las tareas restantes
+	    despFil = 0;			// desplazamiento
 	    mtype = FROM_MASTER;
 
-	    // mientras haya tareas a ejecutar
-	    while( tareasHechas < CantTareas){
+	    // ejecuta mientras haya tareas a enviar
+	    while( tareaEnviada < CantTareas){
 
 	    	// se envian las tareas
-			for (dest=0; dest <= numworkers; dest++){
+			for (dest=0; dest < numworkers; dest++){
 
-				if (dest == 0){
+				if (dest == MASTER){
 					//TODO El MASTER ejecuta su parte.
 				}
 
 				// Sino le envia las tareas a los demas procesos.
 				else{
-					despFil = (dest <= extra) ? TamSubBlock+1 : TamSubBlock;
-					printf("enviando %d bloques al proceso %d\n", despFil, dest);
+					// verifica que filas se le va a enviar
+					if( tareaEnviada % TamSubBlock == 0)
+						despFil = despFil + TamSubBlock;
+					//printf("enviando %d bloques al proceso %d\n", despFil, dest);
 
-					// indicate the despFil value at which each process will begin
-					/* looking for data in matrix A                               */
+					// indica el valor despFil en donde cada proceso empezara
+					// a mirar los datos en la matriz A
 					MPI_Send(&despFil, 1, MPI_INT, dest, mtype, MPI_COMM_WORLD);
 
-					/*
-					 * Se debe enviar el numero de bloques
-					 */
-					/* send the number of rows each process is required to compute */
-					MPI_Send(&despFil, 1, MPI_INT, dest, mtype, MPI_COMM_WORLD);
+					// Se envia el numero de filas que tiene cada tarea
+					MPI_Send(&TamSubBlock, 1, MPI_INT, dest, mtype, MPI_COMM_WORLD);
 
-					/*
-					 * send each process rows*col bits of data starting at despFil &
-					 * despCol
-					 */
-					MPI_Send(&a[despFil][0], TamSubBlock*TamSubBlock, MPI_DOUBLE,
+					// envia a cada procesos filas*col bits de datos comenzando
+					// en despFil
+					MPI_Send(&a[despFil][0], TamSubBlock*N, MPI_DOUBLE,
 							dest, mtype, MPI_COMM_WORLD);
 
-					/* send each process the matrix B */
+					// incrementamos la tarea y lo enviamos al proceso
+					tareaEnviada++;
+					MPI_Send(&tareaEnviada, 1, MPI_INT, dest, mtype, MPI_COMM_WORLD);
+
+					/* envia a cada proceso la matriz B */
 					MPI_Send(&b, N*N, MPI_DOUBLE, dest, mtype, MPI_COMM_WORLD);
-					despFil = despFil + despFil;
 				}
 
 			}
@@ -201,7 +201,7 @@ int main(int argc, char* argv[]){
 
 			/* wait for results from all worker tasks */
 			mtype = FROM_WORKER;
-			for (i=1; i<=numworkers; i++)
+			for (i=1; i<numworkers; i++)
 			{
 				source = i;
 
@@ -209,18 +209,20 @@ int main(int argc, char* argv[]){
 				MPI_Recv(&despFil, 1, MPI_INT, source, mtype, MPI_COMM_WORLD, &status);
 
 				/* receive the number of rows the sending process computed */
-				MPI_Recv(&rows, 1, MPI_INT, source, mtype, MPI_COMM_WORLD, &status);
+				MPI_Recv(&TamSubBlock, 1, MPI_INT, source, mtype, MPI_COMM_WORLD, &status);
 
 				/* receive the final values of matrix C starting at the */
 				/* corresponding despFil values                          */
-				MPI_Recv(&c[despFil][0], rows*N, MPI_DOUBLE, source, mtype, MPI_COMM_WORLD, &status);
+				MPI_Recv(&c[despFil][0], TamSubBlock*N, MPI_DOUBLE, source, mtype, MPI_COMM_WORLD, &status);
 			}
+			printf("Primera iteracion de tareas\n");
+			imprimirMatriz(c);
 	    }
 
 	    /* print results */
-	    printf("Primeras 30 filas de resultado matriz (C)\n");
-	    imprimirMatriz(c);
-    	printf ("\n");
+	    //printf("Primeras 30 filas de resultado matriz (C)\n");
+	    //imprimirMatriz(c);
+    	//printf ("\n");
 	}
 
 	/********************** worker task **********************/
@@ -232,19 +234,24 @@ int main(int argc, char* argv[]){
 	    MPI_Recv(&despFil, 1, MPI_INT, MASTER, mtype, MPI_COMM_WORLD, &status);
 
 	    /* receive the number of rows I am required to compute */
-	    MPI_Recv(&rows, 1, MPI_INT, MASTER, mtype, MPI_COMM_WORLD, &status);
+	    MPI_Recv(&TamSubBlock, 1, MPI_INT, MASTER, mtype, MPI_COMM_WORLD, &status);
 
 	    /* receive the matrix A starting at despFil */
-	    MPI_Recv(&a, rows*N, MPI_DOUBLE, MASTER, mtype, MPI_COMM_WORLD, &status);
+	    MPI_Recv(&a, TamSubBlock*N, MPI_DOUBLE, MASTER, mtype, MPI_COMM_WORLD, &status);
+
+	    MPI_Recv(&tareaEnviada, 1, MPI_INT, MASTER, mtype, MPI_COMM_WORLD, &status);
 
 	    /* receive the matrix B */
 	    MPI_Recv(&b, N*N, MPI_DOUBLE, MASTER, mtype, MPI_COMM_WORLD, &status);
 
-	    // Guarda los resultados en la matriz C
-	    for (k=0; k<N; k++)
-	    	for (i=0; i<rows; i++){
+	    // Multiplica y guarda los resultados en la matriz C
+	    for (k=0; k<TamSubBlock; k++)
+	    	// calculamos el inicio de la matriz B
+	    	j = floor( tareaEnviada / TamSubBlock ) * TamSubBlock;
+
+	    	for (i=despFil; i<TamSubBlock; i++){
 	    		c[i][k] = 0.0;
-	    		for (j=0; j<N; j++)
+	    		for (j=j; j<N; j++)
 	    			c[i][k] = c[i][k] + a[i][j] * b[j][k];
 	    	}
 	    mtype = FROM_WORKER;
@@ -253,10 +260,10 @@ int main(int argc, char* argv[]){
 	    MPI_Send(&despFil, 1, MPI_INT, MASTER, mtype, MPI_COMM_WORLD);
 
 	    /* send the number of rows I worked on back to the master */
-	    MPI_Send(&rows, 1, MPI_INT, MASTER, mtype, MPI_COMM_WORLD);
+	    MPI_Send(&TamSubBlock, 1, MPI_INT, MASTER, mtype, MPI_COMM_WORLD);
 
 	    /* send the final portion of C */
-	    MPI_Send(&c, rows*N, MPI_DOUBLE, MASTER, mtype, MPI_COMM_WORLD);
+	    MPI_Send(&c, TamSubBlock*N, MPI_DOUBLE, MASTER, mtype, MPI_COMM_WORLD);
 	}
 
 	/* Finalize MPI */
