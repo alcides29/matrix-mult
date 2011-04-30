@@ -130,8 +130,9 @@ int main(int argc, char* argv[]){
 		despFil,			   // desplazamiento de filas
 		saltoCol,				// Control del salto de columna
 		tareaEnviada,
-		filaInicioA,
-		colInicioB,
+		tareaM = 0,					// Tarea del master
+		filaInicioA = 0,
+		colInicioB = 0,
 		i, j, k, rc;           /* misc */
 	MPI_Status status ;   /* return status for receive */
 
@@ -183,11 +184,14 @@ int main(int argc, char* argv[]){
 	    // ejecuta mientras haya tareas a enviar
 	    while( tareaEnviada < CantTareas){
 
+	    	printf("Tarea enviada: %d\n", tareaEnviada);
+
 	    	// se envian las tareas
 			for (dest=0; dest < numworkers; dest++){
 
+				// El MASTER guarda su parte para ejecutar luego
 				if (dest == MASTER){
-					//TODO El MASTER ejecuta su parte.
+
 					// verifica que filas se le va a enviar
 					if( tareaEnviada % TamSubBlock == 0)
 						despFil = despFil + TamSubBlock;
@@ -195,8 +199,9 @@ int main(int argc, char* argv[]){
 					// Guardamos los valores para procesarlos luego
 					filaInicioA = despFil;
 					colInicioB = calcularSaltoCol(dest, tareaEnviada);
-
-					tareaEnviada++;
+					tareaM = tareaEnviada++;
+					printf("Guardado tarea del master fil %d, col %d, tarea %d",
+							filaInicioA, colInicioB, tareaM);
 				}
 
 				// Sino le envia las tareas a los demas procesos.
@@ -207,7 +212,6 @@ int main(int argc, char* argv[]){
 						despFil = despFil + TamSubBlock;
 
 					saltoCol = calcularSaltoCol(dest, tareaEnviada);
-
 
 					// indica el valor despFil en donde cada proceso empezara
 					// a mirar los datos en la matriz A
@@ -230,16 +234,28 @@ int main(int argc, char* argv[]){
 					/* envia a cada proceso la matriz B */
 					MPI_Send(&b, N*N, MPI_DOUBLE, dest, mtype, MPI_COMM_WORLD);
 				}
-
 			}
 
-			//TODO Procesar los elementos del MASTER
+			/*
+			 * Procesar los elementos del MASTER
+			 */
+			for (k=colInicioB; k < colInicioB+TamSubBlock; k++){
+				printf("\n");
+				for (i=tareaM; i< tareaM+TamSubBlock; i++){
+					c[i][k] = 0.0;
+					for (j=0; j<N; j++)
+						c[i][k] = c[i][k] + a[i][j] * b[j][k];
+					printf("%8.2f \n", c[i][k]);
+				}
+			}
 
 			/* wait for results from all worker tasks */
 			mtype = FROM_WORKER;
 			for (i=1; i<numworkers; i++)
 			{
 				source = i;
+
+				printf("Recibiendo de %d\n", source);
 
 				/* recieve the despFil value the sending process ended with */
 				MPI_Recv(&despFil, 1, MPI_INT, source, mtype, MPI_COMM_WORLD, &status);
@@ -249,14 +265,13 @@ int main(int argc, char* argv[]){
 				/* receive the number of rows the sending process computed */
 				MPI_Recv(&TamSubBlock, 1, MPI_INT, source, mtype, MPI_COMM_WORLD, &status);
 
-				MPI_Recv(&tareaEnviada, 1, MPI_INT, MASTER, mtype, MPI_COMM_WORLD, &status);
+				MPI_Recv(&tareaEnviada, 1, MPI_INT, source, mtype, MPI_COMM_WORLD, &status);
 
 				/* receive the final values of matrix C starting at the */
 				/* corresponding despFil values                          */
 				MPI_Recv(&c[despFil][0], TamSubBlock*N, MPI_DOUBLE, source, mtype, MPI_COMM_WORLD, &status);
 			}
-			printf("Primera iteracion de tareas\n");
-			imprimirMatriz(c);
+			//imprimirMatriz(c);
 	    }
 
 	    /* print results */
@@ -300,6 +315,7 @@ int main(int argc, char* argv[]){
 	    }
 	    mtype = FROM_WORKER;
 
+	    //printf( "Empezamos a enviar desde %d\n", taskid);
 	    /* send the despFil value from which point I worked back to the master */
 	    MPI_Send(&despFil, 1, MPI_INT, MASTER, mtype, MPI_COMM_WORLD);
 
