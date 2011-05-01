@@ -37,6 +37,7 @@
  */
 int TamSubBlock;
 int CantTareas;
+//double c[N][N];				/* result matrix C */
 
 // Deberia generar los elementos de la matriz aleatoriamente
 void generarMatriz(double a[N][N], double b[N][N]) {
@@ -127,6 +128,20 @@ int calcularSaltoFila(int tarea, int despFil){
 	return despFil;
 }
 
+/*
+void cargarResultado_C(float *buffer, int fini, int cantFilas, int cini, int cantCols) {
+    int i, j, k;
+    k = 0;
+    for (i = fini; i < (fini + cantFilas); i++) {
+        for (j = cini; j < (cini + cantCols); j++) {
+            int pos = j + (N * i);
+            //MatrizC[pos] = buffer[k];
+            k++;
+        }
+    }
+}
+*/
+
 int main(int argc, char* argv[]){
 
 	int	numtasks,              /* number of tasks in partition */
@@ -143,7 +158,6 @@ int main(int argc, char* argv[]){
 		tarea = 1,
 		tareaR = 1,
 		tareaEnviada,
-		//tareasMayores = 0,
 		tareaM = 0,					// Tarea del master
 		filaInicioA = 0,
 		inicioFila = 0,
@@ -242,20 +256,21 @@ int main(int argc, char* argv[]){
 			/*
 			 * Procesar los elementos del MASTER
 			 */
-			//printf("Procesando tarea %d del master fil %d, col %d \n", tareaM,
-				//	filaInicioA, saltoCol);
-			printf("Procesando tarea %d del proceso %d fila %d - hasta < %d, "
-					"col %d - hasta < %d,\n",	tareaM, taskid, filaInicioA,
-					filaInicioA+TamSubBlock, saltoCol, saltoCol+TamSubBlock);
+
+			//printf("Procesando tarea %d del proceso %d fila %d - hasta < %d, "
+				//	"col %d - hasta < %d,\n",	tareaM, taskid, filaInicioA,
+					//filaInicioA+TamSubBlock, saltoCol, saltoCol+TamSubBlock);
 			for (k=saltoCol; k < saltoCol+TamSubBlock; k++){
 				//printf("\n");
 				for (i=filaInicioA; i< filaInicioA+TamSubBlock; i++){
-					c[k][i] = 0.0;
+					c[i][k] = 0.0;
 					for (j=0; j<N; j++)
-						c[k][i] = c[k][i] + a[k][j] * b[j][i];
+						c[i][k] = c[i][k] + a[i][j] * b[j][k];
 					//printf("%8.2f", c[i][k]);
 				}
 			}
+			//printf("Recibido de master\n");
+			//imprimirMatriz(c);
 
 			/*
 			 * Si aun hay tareas por procesar, aguardamos los resultados de
@@ -278,8 +293,8 @@ int main(int argc, char* argv[]){
 
 					/* receive the final values of matrix C starting at the */
 					/* corresponding despFil values                          */
-					MPI_Recv(&c[inicioFila][inicioCol], N*N, MPI_DOUBLE, source, mtype, MPI_COMM_WORLD, &status);
-
+					MPI_Recv(&c[inicioFila][inicioCol], TamSubBlock*TamSubBlock, MPI_DOUBLE, source, mtype, MPI_COMM_WORLD, &status);
+					//printf("Recibido de %d:\n", source);
 					//imprimirMatriz(c);
 				}
 			}
@@ -321,14 +336,14 @@ int main(int argc, char* argv[]){
 					"col %d - hasta < %d,\n",	tareaEnviada, taskid, inicioFila,
 					inicioFila+TamSubBlock, saltoCol, saltoCol+TamSubBlock);
 			for (k=saltoCol; k < saltoCol+TamSubBlock; k++){
-				//printf("\n");
+				printf("\n");
 				for (i=inicioFila; i< inicioFila+TamSubBlock; i++){
-					c[k][i] = 0.0;
-					for (j=0; j<N; j++)
-						c[k][i] = c[k][i] + a[k][j] * b[j][i];
-					//i, j, k
-					//mult[i][j]+=m1[i][k]*m2[k][j];
-					/*printf("%8.2f\n", c[i][k]);
+					c[i][k] = 0.0;
+					for (j=0; j<N; j++){
+						c[i][k] = c[i][k] + a[i][j] * b[j][k];
+					}
+					printf("%8.2f", c[k][i]);
+					/*
 					if( c[i][k] < 0.0 ){
 						printf("Error proceso: %d, tarea: %d\n", taskid, tareaEnviada);
 
@@ -347,15 +362,13 @@ int main(int argc, char* argv[]){
 			MPI_Send(&TamSubBlock, 1, MPI_INT, MASTER, mtype, MPI_COMM_WORLD);
 
 			/* send the final portion of C */
-			MPI_Send(&c, N*N, MPI_DOUBLE, MASTER, mtype, MPI_COMM_WORLD);
+			MPI_Send(&c, TamSubBlock*TamSubBlock, MPI_DOUBLE, MASTER, mtype, MPI_COMM_WORLD);
 
 			tareaR++;
 		}
 
 	}
-	//printf( "Finalizando el proceso %d\n", taskid);
 
-	/* Finalize MPI */
 	MPI_Finalize();
 
 	return (MPI_SUCCESS);
