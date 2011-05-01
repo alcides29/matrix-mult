@@ -54,7 +54,7 @@ void generarMatriz(double a[N][N], double b[N][N]) {
 void imprimirMatriz(double matriz[N][N]) {
 	int i, j;
 
-	for (i=0; i<30; i++){
+	for (i=0; i<N; i++){
 		printf("\n");
 
 		for (j=0; j<N; j++)
@@ -125,7 +125,9 @@ int main(int argc, char* argv[]){
 		//extra,   			   /* determines rows sent to each worker */
 		despFil,			   // desplazamiento de filas
 		saltoCol,				// Control del salto de columna
+		cantTareasPorProceso,
 		tarea = 1,
+		tareaR = 1,
 		tareaEnviada,
 		tareaM = 0,					// Tarea del master
 		filaInicioA = 0,
@@ -179,7 +181,7 @@ int main(int argc, char* argv[]){
 	    // ejecuta mientras haya tareas a enviar
 	    while( tarea <= CantTareas){
 
-	    	//printf("Tarea enviada: %d\n", tarea);
+	    	//printf("Tarea: %d\n", tarea);
 	    	// verifica que filas se le va a enviar
 			if( tarea <= TamSubBlock)
 				despFil = 0;
@@ -188,9 +190,9 @@ int main(int argc, char* argv[]){
 				//printf("desp: %d\n", despFil);
 			}
 
-
-	    	// se envian las tareas
 			mtype = FROM_MASTER;
+
+			// se envian las tareas
 			for (dest=0; dest < numworkers; dest++){
 
 				// El MASTER guarda su parte para ejecutar luego
@@ -198,6 +200,8 @@ int main(int argc, char* argv[]){
 					filaInicioA = despFil;
 					saltoCol = calcularSaltoCol(saltoCol, tarea);
 					tareaM = tarea++;
+				}else if( tarea > CantTareas ){
+					break;
 				}
 
 				// Sino le envia las tareas a los demas procesos.
@@ -224,7 +228,7 @@ int main(int argc, char* argv[]){
 
 					/* envia a cada proceso la matriz B */
 					MPI_Send(&b, N*N, MPI_DOUBLE, dest, mtype, MPI_COMM_WORLD);
-					printf("enviado tarea %d \n", tarea);
+					//printf("enviado tarea %d al proceso \n", tarea);
 					tarea++;
 				}
 			}
@@ -235,7 +239,7 @@ int main(int argc, char* argv[]){
 			printf("Procesando tarea %d del master fil %d, col %d \n", tareaM,
 					filaInicioA, saltoCol);
 			for (k=saltoCol; k < saltoCol+TamSubBlock; k++){
-				printf("\n");
+				//printf("\n");
 				for (i=tareaM; i< tareaM+TamSubBlock; i++){
 					c[i][k] = 0.0;
 					for (j=0; j<N; j++)
@@ -244,40 +248,47 @@ int main(int argc, char* argv[]){
 				}
 			}
 
-			/* wait for results from all worker tasks */
-			mtype = FROM_WORKER;
-			for (i=1; i<numworkers; i++)
-			{
-				source = i;
+			if (tarea <= CantTareas){
+				/* wait for results from all worker tasks */
+				mtype = FROM_WORKER;
+				for (i=1; i<numworkers; i++)
+				{
+					source = i;
 
-				//printf("Recibiendo de %d\n", source);
+					//printf("Recibiendo de %d\n", source);
 
-				/* recieve the despFil value the sending process ended with */
-				MPI_Recv(&despFil, 1, MPI_INT, source, mtype, MPI_COMM_WORLD, &status);
+					/* recieve the despFil value the sending process ended with */
+					MPI_Recv(&despFil, 1, MPI_INT, source, mtype, MPI_COMM_WORLD, &status);
 
-				MPI_Recv(&saltoCol, 1, MPI_INT, source, mtype, MPI_COMM_WORLD, &status);
+					MPI_Recv(&saltoCol, 1, MPI_INT, source, mtype, MPI_COMM_WORLD, &status);
 
-				/* receive the number of rows the sending process computed */
-				MPI_Recv(&TamSubBlock, 1, MPI_INT, source, mtype, MPI_COMM_WORLD, &status);
+					/* receive the number of rows the sending process computed */
+					MPI_Recv(&TamSubBlock, 1, MPI_INT, source, mtype, MPI_COMM_WORLD, &status);
 
-				MPI_Recv(&tareaEnviada, 1, MPI_INT, source, mtype, MPI_COMM_WORLD, &status);
+					//MPI_Recv(&tareaEnviada, 1, MPI_INT, source, mtype, MPI_COMM_WORLD, &status);
 
-				/* receive the final values of matrix C starting at the */
-				/* corresponding despFil values                          */
-				MPI_Recv(&c[despFil][0], TamSubBlock*N, MPI_DOUBLE, source, mtype, MPI_COMM_WORLD, &status);
+					/* receive the final values of matrix C starting at the */
+					/* corresponding despFil values                          */
+					MPI_Recv(&c[despFil][0], TamSubBlock*N, MPI_DOUBLE, source, mtype, MPI_COMM_WORLD, &status);
+				}
+				//imprimirMatriz(c);
 			}
-			//imprimirMatriz(c);
-	    }
+		}
+
 
 	    /* print results */
 	    //printf("Primeras 30 filas de resultado matriz (C)\n");
-	    //imprimirMatriz(c);
+	    imprimirMatriz(c);
     	//printf ("\n");
 	}
 
 	/********************** worker task **********************/
 	if (taskid > MASTER){
-		while(tareaR < N){
+
+		cantTareasPorProceso = N / numworkers;
+		//printf("cantTareasProceso %d\n", cantTareasPorProceso);
+
+		while(tareaR <= cantTareasPorProceso){
 			mtype = FROM_MASTER;
 
 			/* receive the initial despFil position of the matrix at which */
@@ -321,7 +332,7 @@ int main(int argc, char* argv[]){
 			/* send the number of rows I worked on back to the master */
 			MPI_Send(&TamSubBlock, 1, MPI_INT, MASTER, mtype, MPI_COMM_WORLD);
 
-			MPI_Send(&tareaEnviada, 1, MPI_INT, MASTER, mtype, MPI_COMM_WORLD);
+			//MPI_Send(&tareaEnviada, 1, MPI_INT, MASTER, mtype, MPI_COMM_WORLD);
 
 			/* send the final portion of C */
 			MPI_Send(&c, TamSubBlock*N, MPI_DOUBLE, MASTER, mtype, MPI_COMM_WORLD);
@@ -330,6 +341,7 @@ int main(int argc, char* argv[]){
 		}
 
 	}
+	printf( "Finalizando el proceso %d\n", taskid);
 
 	/* Finalize MPI */
 	MPI_Finalize();
