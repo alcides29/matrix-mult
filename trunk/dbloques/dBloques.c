@@ -102,17 +102,13 @@ void verificarCondiciones(numworkers){
 }
 
 
-int calcularSaltoCol(int dest, int tareaEnviada){
-	int saltoCol;
+int calcularSaltoCol(int saltoCol, int tareaEnviada){
 
-	if ( tareaEnviada < TamSubBlock ){
-		saltoCol = dest * TamSubBlock;
-	}else if( tareaEnviada % TamSubBlock == 0){
-		saltoCol = 0 * TamSubBlock;
+	if ( (tareaEnviada % TamSubBlock) == 1){
+		saltoCol = 0;
 	}else{
-		saltoCol = dest * TamSubBlock;
+		saltoCol = saltoCol + TamSubBlock;
 	}
-
 	return saltoCol;
 }
 
@@ -132,7 +128,6 @@ int main(int argc, char* argv[]){
 		tareaEnviada,
 		tareaM = 0,					// Tarea del master
 		filaInicioA = 0,
-		colInicioB = 0,
 		i, j, k, rc;           /* misc */
 	MPI_Status status ;   /* return status for receive */
 
@@ -172,7 +167,7 @@ int main(int argc, char* argv[]){
 	 	/* Iniciamos la distribucion ciclica */
 	 	TamSubBlock = sqrt(N);
 	 	CantTareas = N;
-	 	tareaEnviada = 0;
+	 	tareaEnviada = 1;
 	 	saltoCol = 0;
 	 	//TamBlockProc = sqrt(numtasks);
 
@@ -182,36 +177,29 @@ int main(int argc, char* argv[]){
 	    mtype = FROM_MASTER;
 
 	    // ejecuta mientras haya tareas a enviar
-	    while( tareaEnviada < CantTareas){
+	    while( tareaEnviada <= CantTareas){
 
-	    	printf("Tarea enviada: %d\n", tareaEnviada);
+	    	//printf("Tarea enviada: %d\n", tareaEnviada);
+	    	// verifica que filas se le va a enviar
+			if( tareaEnviada <= TamSubBlock)
+				despFil = 0;
+			else if(( tareaEnviada-1 ) % TamSubBlock == 0)
+				despFil = despFil + TamSubBlock;
 
 	    	// se envian las tareas
 			for (dest=0; dest < numworkers; dest++){
 
 				// El MASTER guarda su parte para ejecutar luego
 				if (dest == MASTER){
-
-					// verifica que filas se le va a enviar
-					if( tareaEnviada % TamSubBlock == 0)
-						despFil = despFil + TamSubBlock;
-
-					// Guardamos los valores para procesarlos luego
 					filaInicioA = despFil;
-					colInicioB = calcularSaltoCol(dest, tareaEnviada);
+					saltoCol = calcularSaltoCol(saltoCol, tareaEnviada);
 					tareaM = tareaEnviada++;
-					printf("Guardado tarea del master fil %d, col %d, tarea %d",
-							filaInicioA, colInicioB, tareaM);
 				}
 
 				// Sino le envia las tareas a los demas procesos.
 				else{
 
-					// verifica que filas se le va a enviar
-					if( tareaEnviada % TamSubBlock == 0)
-						despFil = despFil + TamSubBlock;
-
-					saltoCol = calcularSaltoCol(dest, tareaEnviada);
+					saltoCol = calcularSaltoCol(saltoCol, tareaEnviada);
 
 					// indica el valor despFil en donde cada proceso empezara
 					// a mirar los datos en la matriz A
@@ -227,25 +215,26 @@ int main(int argc, char* argv[]){
 					MPI_Send(&a[despFil][0], TamSubBlock*N, MPI_DOUBLE,
 							dest, mtype, MPI_COMM_WORLD);
 
-					// incrementamos la tarea y lo enviamos al proceso
-					tareaEnviada++;
 					MPI_Send(&tareaEnviada, 1, MPI_INT, dest, mtype, MPI_COMM_WORLD);
 
 					/* envia a cada proceso la matriz B */
 					MPI_Send(&b, N*N, MPI_DOUBLE, dest, mtype, MPI_COMM_WORLD);
+					tareaEnviada++;
 				}
 			}
 
 			/*
 			 * Procesar los elementos del MASTER
 			 */
-			for (k=colInicioB; k < colInicioB+TamSubBlock; k++){
+			printf("Procesando tarea %d del master fil %d, col %d, tarea %d"
+										"\n", tareaM, filaInicioA, saltoCol);
+			for (k=saltoCol; k < saltoCol+TamSubBlock; k++){
 				printf("\n");
 				for (i=tareaM; i< tareaM+TamSubBlock; i++){
 					c[i][k] = 0.0;
 					for (j=0; j<N; j++)
 						c[i][k] = c[i][k] + a[i][j] * b[j][k];
-					printf("%8.2f \n", c[i][k]);
+					printf("%8.2f", c[i][k]);
 				}
 			}
 
