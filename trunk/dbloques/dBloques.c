@@ -242,14 +242,17 @@ int main(int argc, char* argv[]){
 			/*
 			 * Procesar los elementos del MASTER
 			 */
-			printf("Procesando tarea %d del master fil %d, col %d \n", tareaM,
-					filaInicioA, saltoCol);
+			//printf("Procesando tarea %d del master fil %d, col %d \n", tareaM,
+				//	filaInicioA, saltoCol);
+			printf("Procesando tarea %d del proceso %d fila %d - hasta < %d, "
+					"col %d - hasta < %d,\n",	tareaM, taskid, filaInicioA,
+					filaInicioA+TamSubBlock, saltoCol, saltoCol+TamSubBlock);
 			for (k=saltoCol; k < saltoCol+TamSubBlock; k++){
 				//printf("\n");
 				for (i=filaInicioA; i< filaInicioA+TamSubBlock; i++){
-					c[i][k] = 0.0;
+					c[k][i] = 0.0;
 					for (j=0; j<N; j++)
-						c[i][k] = c[i][k] + a[i][j] * b[j][k];
+						c[k][i] = c[k][i] + a[k][j] * b[j][i];
 					//printf("%8.2f", c[i][k]);
 				}
 			}
@@ -275,7 +278,7 @@ int main(int argc, char* argv[]){
 
 					/* receive the final values of matrix C starting at the */
 					/* corresponding despFil values                          */
-					MPI_Recv(&c[inicioFila][inicioCol], TamSubBlock*TamSubBlock, MPI_DOUBLE, source, mtype, MPI_COMM_WORLD, &status);
+					MPI_Recv(&c[inicioFila][inicioCol], N*N, MPI_DOUBLE, source, mtype, MPI_COMM_WORLD, &status);
 
 					//imprimirMatriz(c);
 				}
@@ -312,17 +315,24 @@ int main(int argc, char* argv[]){
 
 
 			/*
-			 * Multiplica y guarda los resultados en la matriz C
+			 * Multiplica y guarda los resultados ben la matriz C
 			 */
-			printf("Procesando tarea %d del proceso %d fil %d, col %d\n",
-					tareaEnviada, taskid, inicioFila, saltoCol);
+			printf("Procesando tarea %d del proceso %d fil %d - hasta < %d, "
+					"col %d - hasta < %d,\n",	tareaEnviada, taskid, inicioFila,
+					inicioFila+TamSubBlock, saltoCol, saltoCol+TamSubBlock);
 			for (k=saltoCol; k < saltoCol+TamSubBlock; k++){
 				//printf("\n");
 				for (i=inicioFila; i< inicioFila+TamSubBlock; i++){
-					c[i][k] = 0.0;
+					c[k][i] = 0.0;
 					for (j=0; j<N; j++)
-						c[i][k] = c[i][k] + a[i][j] * b[j][k];
-					//printf("%8.2f\n", c[i][k]);
+						c[k][i] = c[k][i] + a[k][j] * b[j][i];
+					//i, j, k
+					//mult[i][j]+=m1[i][k]*m2[k][j];
+					/*printf("%8.2f\n", c[i][k]);
+					if( c[i][k] < 0.0 ){
+						printf("Error proceso: %d, tarea: %d\n", taskid, tareaEnviada);
+
+					}*/
 				}
 			}
 			mtype = FROM_WORKER;
@@ -337,7 +347,7 @@ int main(int argc, char* argv[]){
 			MPI_Send(&TamSubBlock, 1, MPI_INT, MASTER, mtype, MPI_COMM_WORLD);
 
 			/* send the final portion of C */
-			MPI_Send(&c, TamSubBlock*TamSubBlock, MPI_DOUBLE, MASTER, mtype, MPI_COMM_WORLD);
+			MPI_Send(&c, N*N, MPI_DOUBLE, MASTER, mtype, MPI_COMM_WORLD);
 
 			tareaR++;
 		}
