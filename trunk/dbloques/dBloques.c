@@ -231,8 +231,8 @@ int main(int argc, char* argv[]){
 			/*
 			 * Procesar los elementos del MASTER
 			 */
-			printf("Procesando tarea %d del master fil %d, col %d"
-										"\n", tareaM, filaInicioA, saltoCol);
+			printf("Procesando tarea %d del master fil %d, col %d \n", tareaM,
+					filaInicioA, saltoCol);
 			for (k=saltoCol; k < saltoCol+TamSubBlock; k++){
 				printf("\n");
 				for (i=tareaM; i< tareaM+TamSubBlock; i++){
@@ -299,7 +299,8 @@ int main(int argc, char* argv[]){
 	    /*
 	     * Multiplica y guarda los resultados en la matriz C
 	     */
-	    printf("Procesando tarea %d del proceso %d fil %d, col %d\n", tareaEnviada, taskid, filaInicioA, saltoCol);
+	    printf("Procesando tarea %d del proceso %d fil %d, col %d\n",
+	    		tareaEnviada, taskid, filaInicioA, saltoCol);
 	    for (k=saltoCol; k < saltoCol+TamSubBlock; k++){
 	    	for (i=despFil; i< despFil+TamSubBlock; i++){
 	    		c[i][k] = 0.0;
