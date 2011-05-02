@@ -127,15 +127,13 @@ int calcularSaltoFila(int tarea, int despFil){
 }
 
 
-void cargarResultado(double *caux, int fini, int cantFilas, int cini, int cantCols) {
-    int i, j, k;
-    k = 0;
+void cargarResultado(double caux[N][N], int fini, int cantFilas, int cini, int cantCols) {
+    int i, j;
 
     for (i = fini; i < (fini + cantFilas); i++) {
         for (j = cini; j < (cini + cantCols); j++) {
             //int pos = j + (N * i);
-            c[i][j] = caux[k];
-            k++;
+            c[i][j] = caux[i][j];
         }
     }
 }
@@ -192,6 +190,9 @@ int main(int argc, char* argv[]){
 	 			b[i][j]= i*j;
 	 	/* fin de generacion de matrices */
 
+	 	//imprimirMatriz(a);
+	 	//imprimirMatriz(b);
+
 	 	verificarCondiciones(numworkers);
 	 	TamSubBlock = sqrt(N);
 	 	CantTareas = N;
@@ -242,7 +243,7 @@ int main(int argc, char* argv[]){
 					MPI_Send(&b, N*N, MPI_DOUBLE, dest, mtype, MPI_COMM_WORLD);
 					tarea++;
 				}
-				//despFil = calcularSaltoFila(tarea, despFil);
+				despFil = calcularSaltoFila(tarea, despFil);
 			}
 
 
@@ -252,12 +253,14 @@ int main(int argc, char* argv[]){
 			for (k=saltoCol; k < saltoCol+TamSubBlock; k++){
 				//printf("\n");
 				for (i=filaInicioA; i< filaInicioA+TamSubBlock; i++){
-					c[i][k] = 0.0;
+					caux[i][k] = 0.0;
 					for (j=0; j<N; j++)
-						c[i][k] = c[i][k] + a[i][j] * b[j][k];
+						caux[i][k] = caux[i][k] + a[i][j] * b[j][k];
 					//printf("%8.2f", c[i][k]);
 				}
 			}
+			cargarResultado(caux, filaInicioA, TamSubBlock, saltoCol, TamSubBlock);
+			//imprimirMatriz(caux);
 
 			/*
 			 * Si aun hay tareas por procesar, aguardamos los resultados de
@@ -281,12 +284,15 @@ int main(int argc, char* argv[]){
 					/* receive the final values of matrix C starting at the */
 					/* corresponding despFil values                          */
 					MPI_Recv(&caux[inicioFila][0], TamSubBlock*N, MPI_DOUBLE, source, mtype, MPI_COMM_WORLD, &status);
+
+					cargarResultado(caux, inicioFila, TamSubBlock, inicioCol, TamSubBlock);
 					//printf("Recibido de %d:\n", source);
 					//imprimirMatriz(c);
 				}
+
 			}
 		}
-	    imprimirMatriz(c);
+	    //imprimirMatriz(c);
 	}
 
 	/********************** worker task **********************/
@@ -323,7 +329,10 @@ int main(int argc, char* argv[]){
 					caux[i][k] = 0.0;
 					for (j=0; j<N; j++){
 						caux[i][k] = caux[i][k] + a[i][j] * b[j][k];
+						if(tareaEnviada > TamSubBlock)
+							printf("tarea %d --> a[%d][%d] * b[%d][%d]\n", tareaEnviada, i, j, j, k /*caux[i][k]*/);
 					}
+					//printf("tarea %d del proceso %d --> %.0f\n", tareaEnviada, taskid, caux[i][k]);
 				}
 			}
 
