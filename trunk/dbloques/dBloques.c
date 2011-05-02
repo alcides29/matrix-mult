@@ -37,7 +37,7 @@
  */
 int TamSubBlock;
 int CantTareas;
-//double c[N][N];				/* result matrix C */
+double c[N][N];				/* result matrix C */
 
 // Deberia generar los elementos de la matriz aleatoriamente
 void generarMatriz(double a[N][N], double b[N][N]) {
@@ -126,6 +126,20 @@ int calcularSaltoFila(int tarea, int despFil){
 	return despFil;
 }
 
+
+void cargarResultado(double *caux, int fini, int cantFilas, int cini, int cantCols) {
+    int i, j, k;
+    k = 0;
+
+    for (i = fini; i < (fini + cantFilas); i++) {
+        for (j = cini; j < (cini + cantCols); j++) {
+            //int pos = j + (N * i);
+            c[i][j] = caux[k];
+            k++;
+        }
+    }
+}
+
 int main(int argc, char* argv[]){
 
 	int	numtasks,              /* number of tasks in partition */
@@ -150,7 +164,8 @@ int main(int argc, char* argv[]){
 
 	double	a[N][N],           /* matrix A to be multiplied */
 			b[N][N],           /* matrix B to be multiplied */
-			c[N][N];           /* result matrix C */
+			//c[N][N];           /* result matrix C */
+			caux[N][N];        /* result matrix C */
 
 	rc = MPI_Init(&argc, &argv);
 	/* get the size of the process group */
@@ -227,7 +242,7 @@ int main(int argc, char* argv[]){
 					MPI_Send(&b, N*N, MPI_DOUBLE, dest, mtype, MPI_COMM_WORLD);
 					tarea++;
 				}
-
+				//despFil = calcularSaltoFila(tarea, despFil);
 			}
 
 
@@ -265,9 +280,9 @@ int main(int argc, char* argv[]){
 
 					/* receive the final values of matrix C starting at the */
 					/* corresponding despFil values                          */
-					MPI_Recv(&c[inicioFila][0], TamSubBlock*N, MPI_DOUBLE, source, mtype, MPI_COMM_WORLD, &status);
+					MPI_Recv(&caux[inicioFila][0], TamSubBlock*N, MPI_DOUBLE, source, mtype, MPI_COMM_WORLD, &status);
 					//printf("Recibido de %d:\n", source);
-					imprimirMatriz(c);
+					//imprimirMatriz(c);
 				}
 			}
 		}
@@ -302,12 +317,12 @@ int main(int argc, char* argv[]){
 			/*
 			 * Multiplica y guarda los resultados en la matriz C
 			 */
-			printf("Procesando tarea %d del proceso %d fil %d, col %d\n", tareaEnviada, taskid, despFil, saltoCol);
+			//printf("Procesando tarea %d del proceso %d fil %d, col %d\n", tareaEnviada, taskid, inicioFila, saltoCol);
 			for (k=saltoCol; k < saltoCol+TamSubBlock; k++){
 				for (i=inicioFila; i< inicioFila+TamSubBlock; i++){
-					c[i][k] = 0.0;
+					caux[i][k] = 0.0;
 					for (j=0; j<N; j++){
-						c[i][k] = c[i][k] + a[i][j] * b[j][k];
+						caux[i][k] = caux[i][k] + a[i][j] * b[j][k];
 					}
 				}
 			}
@@ -320,7 +335,7 @@ int main(int argc, char* argv[]){
 			/* send the number of rows I worked on back to the master */
 			MPI_Send(&TamSubBlock, 1, MPI_INT, MASTER, mtype, MPI_COMM_WORLD);
 			/* send the final portion of C */
-			MPI_Send(&c, TamSubBlock*N, MPI_DOUBLE, MASTER, mtype, MPI_COMM_WORLD);
+			MPI_Send(&caux, TamSubBlock*N, MPI_DOUBLE, MASTER, mtype, MPI_COMM_WORLD);
 
 			tareaR++;
 		}
