@@ -14,8 +14,6 @@
  ============================================================================
  */
 
-//#include "comun.h"
-//#include "dbloques.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -55,10 +53,10 @@ void generarMatriz(double a[N][N], double b[N][N]) {
 void imprimirMatriz(double matriz[N][N]) {
 	int i, j;
 
-	for (i=0; i<N; i++){
+	for (i=0; i<9; i++){
 		printf("\n");
 
-		for (j=0; j<N; j++)
+		for (j=0; j<9; j++)
 			printf("%8.2f  ", matriz[i][j]);
 	}
 	printf ("\n");
@@ -188,6 +186,10 @@ int main(int argc, char* argv[]){
 	 	for (i=0; i<N; i++)
 	 		for (j=0; j<N; j++)
 	 			b[i][j]= i*j;
+
+	 	for (i=0; i<N; i++)
+	 		 		for (j=0; j<N; j++)
+	 		 			caux[i][j]= 0;
 	 	/* fin de generacion de matrices */
 
 	 	//imprimirMatriz(a);
@@ -233,7 +235,7 @@ int main(int argc, char* argv[]){
 
 					// envia a cada procesos filas*col bits de datos comenzando
 					// en despFil
-					MPI_Send(&a[inicioFila][0], TamSubBlock*N, MPI_DOUBLE,
+					MPI_Send(&a[inicioFila], TamSubBlock*N, MPI_DOUBLE,
 							dest, mtype, MPI_COMM_WORLD);
 
 					tareaEnviada = tarea;
@@ -292,7 +294,7 @@ int main(int argc, char* argv[]){
 
 			}
 		}
-	    //imprimirMatriz(c);
+	    imprimirMatriz(c);
 	}
 
 	/********************** worker task **********************/
@@ -325,12 +327,12 @@ int main(int argc, char* argv[]){
 			 */
 			//printf("Procesando tarea %d del proceso %d fil %d, col %d\n", tareaEnviada, taskid, inicioFila, saltoCol);
 			for (k=saltoCol; k < saltoCol+TamSubBlock; k++){
-				for (i=inicioFila; i< inicioFila+TamSubBlock; i++){
+				for (i=0; i< TamSubBlock; i++){
 					caux[i][k] = 0.0;
 					for (j=0; j<N; j++){
 						caux[i][k] = caux[i][k] + a[i][j] * b[j][k];
-						if(tareaEnviada > TamSubBlock)
-							printf("tarea %d --> a[%d][%d] * b[%d][%d]\n", tareaEnviada, i, j, j, k /*caux[i][k]*/);
+						//if(tareaEnviada > TamSubBlock)
+							//printf("tarea %d --> %f * %f\n", tareaEnviada, a[i][j], b[j][k]);
 					}
 					//printf("tarea %d del proceso %d --> %.0f\n", tareaEnviada, taskid, caux[i][k]);
 				}
