@@ -22,7 +22,7 @@
 #include "mpi.h"
 
 // Constantes
-#define N 9					/* tamanho de las matrices
+#define N 25					/* tamanho de las matrices
 							*  debe ser cuadrado perfecto
 							*/
 #define MASTER 0            /* taskid of first task */
@@ -50,14 +50,25 @@ void generarMatriz(double a[N][N], double b[N][N]) {
 			b[i][j]= i*j;
 }
 
+/*
+ * Imprimimos las primeras 16 columnas y filas
+ */
 void imprimirMatriz(double matriz[N][N]) {
-	int i, j;
+	int i, j, tam;
 
-	for (i=0; i<9; i++){
+	if( N <= 16)
+		tam = N;
+	else
+		tam = 16;
+
+
+	for (i=0; i<tam; i++){
 		printf("\n");
+		if( (i) % TamSubBlock == 0)
+			printf("\n");
 
-		for (j=0; j<9; j++)
-			printf("%8.2f  ", matriz[i][j]);
+		for (j=0; j<tam; j++)
+			printf("%8.0f  ", matriz[i][j]);
 	}
 	printf ("\n");
 }
@@ -105,8 +116,10 @@ int calcularSaltoCol(int saltoCol, int tareaEnviada){
 
 	if ( (tareaEnviada % TamSubBlock) == 1){
 		saltoCol = 0;
-	}else{
+		//printf("SaltoCol %d, tareaEnviada %d\n", saltoCol, tareaEnviada);
+	}else if (tareaEnviada > 1){
 		saltoCol = saltoCol + TamSubBlock;
+		//printf("SaltoCol %d, tareaEnviada %d\n", saltoCol, tareaEnviada);
 	}
 	return saltoCol;
 }
@@ -119,6 +132,7 @@ int calcularSaltoFila(int tarea, int despFil){
 		despFil = 0;
 	}else if( tareasMayores == 0 ){
 		despFil = despFil + TamSubBlock;
+		//printf("tarea %d Desp. de Fila %d\n", tarea, despFil);
 	}
 
 	return despFil;
@@ -150,8 +164,10 @@ int main(int argc, char* argv[]){
 		tarea = 1,
 		tareaR = 1,
 		tareaEnviada,
+		tareaRecibida = 0,
 		tareaM = 0,					// Tarea del master
-		filaInicioA = 0,
+		inicioFilaM = 0,
+		inicioColM = 0,
 		inicioFila = 0,
 		inicioCol = 0,
 		i, j, k, rc;           /* misc */
@@ -177,6 +193,7 @@ int main(int argc, char* argv[]){
 	/********************** master task **********************/
 	if (taskid == MASTER){
 		printf ("Total de Procesos: %d \n", numworkers);
+		printf ("Dimension de la matriz: %d*%d\n", N, N);
 
 	     /* aqui se generan las matrices */
 	    for (i=0; i<N; i++)
@@ -200,21 +217,25 @@ int main(int argc, char* argv[]){
 	 	CantTareas = N;
 	 	saltoCol = 0;
 	    despFil = 0;			// desplazamiento
+	    tarea = 1;
 
 	    // ejecuta mientras haya tareas a enviar
 	    while( tarea <= CantTareas){
 
 			mtype = FROM_MASTER;
-			despFil = calcularSaltoFila(tarea, despFil);
+			//despFil = calcularSaltoFila(tarea, despFil);
 
 			// se envian las tareas
 			for (dest=0; dest < numworkers; dest++){
 
 				// El MASTER guarda su parte para ejecutar luego
 				if (dest == MASTER){
-					filaInicioA = despFil;
-					saltoCol = calcularSaltoCol(saltoCol, tarea);
+					inicioFilaM = despFil;
+					//printf("tarea %d, salto %d\n", tarea, saltoCol);
+					inicioColM = calcularSaltoCol(saltoCol, tarea);
+					saltoCol = inicioColM;
 					tareaM = tarea++;
+					//printf("tareaM %d, fila %d, col %d\n", tareaM, inicioFilaM, saltoCol);
 
 				}else if( tarea > CantTareas ){
 					break;
@@ -234,8 +255,8 @@ int main(int argc, char* argv[]){
 					MPI_Send(&TamSubBlock, 1, MPI_INT, dest, mtype, MPI_COMM_WORLD);
 
 					// envia a cada procesos filas*col bits de datos comenzando
-					// en despFil
-					MPI_Send(&a[inicioFila], TamSubBlock*N, MPI_DOUBLE,
+					// en inicioFila
+					MPI_Send(&a[inicioFila][0], TamSubBlock*N, MPI_DOUBLE,
 							dest, mtype, MPI_COMM_WORLD);
 
 					tareaEnviada = tarea;
@@ -252,23 +273,31 @@ int main(int argc, char* argv[]){
 			/*
 			 * Procesar la tarea del MASTER
 			 */
-			for (k=saltoCol; k < saltoCol+TamSubBlock; k++){
+			//printf("Procesando tarea %d del proceso %d fil %d, col %d\n", tareaM, taskid, inicioFilaM, inicioColM);
+			for (k=inicioColM; k < inicioColM+TamSubBlock; k++){
 				//printf("\n");
-				for (i=filaInicioA; i< filaInicioA+TamSubBlock; i++){
+				for (i=inicioFilaM; i< inicioFilaM+TamSubBlock; i++){
 					caux[i][k] = 0.0;
-					for (j=0; j<N; j++)
+					//printf("\n");
+					for (j=0; j<N; j++){
 						caux[i][k] = caux[i][k] + a[i][j] * b[j][k];
+						//printf("--> %1.0f * %1.0f\n", a[i][j], b[j][k]);
+					}
 					//printf("%8.2f", c[i][k]);
 				}
 			}
-			cargarResultado(caux, filaInicioA, TamSubBlock, saltoCol, TamSubBlock);
+			cargarResultado(caux, inicioFilaM, TamSubBlock, inicioColM, TamSubBlock);
+			tareaRecibida++;
 			//imprimirMatriz(caux);
 
 			/*
 			 * Si aun hay tareas por procesar, aguardamos los resultados de
 			 * los trabajadores
 			 */
+			//printf("tarea %d, CantTareas %d\n", tarea, CantTareas);
 			if (tarea <= CantTareas){
+
+				//printf("Entra pero no imprime 1\n");
 
 				mtype = FROM_WORKER;
 				for (i=1; i<numworkers; i++)
@@ -287,11 +316,13 @@ int main(int argc, char* argv[]){
 					/* corresponding despFil values                          */
 					MPI_Recv(&caux[inicioFila][0], TamSubBlock*N, MPI_DOUBLE, source, mtype, MPI_COMM_WORLD, &status);
 
+					//imprimirMatriz(caux);
+					//printf("Entra pero no imprime 2\n");
 					cargarResultado(caux, inicioFila, TamSubBlock, inicioCol, TamSubBlock);
 					//printf("Recibido de %d:\n", source);
 					//imprimirMatriz(c);
+					tareaRecibida++;
 				}
-
 			}
 		}
 	    imprimirMatriz(c);
@@ -315,6 +346,8 @@ int main(int argc, char* argv[]){
 
 			/* receive the matrix A starting at despFil */
 			MPI_Recv(&a, TamSubBlock*N, MPI_DOUBLE, MASTER, mtype, MPI_COMM_WORLD, &status);
+			//if(taskid == 1)
+				//imprimirMatriz(a);
 
 			MPI_Recv(&tareaEnviada, 1, MPI_INT, MASTER, mtype, MPI_COMM_WORLD, &status);
 
@@ -332,7 +365,7 @@ int main(int argc, char* argv[]){
 					for (j=0; j<N; j++){
 						caux[i][k] = caux[i][k] + a[i][j] * b[j][k];
 						//if(tareaEnviada > TamSubBlock)
-							//printf("tarea %d --> %f * %f\n", tareaEnviada, a[i][j], b[j][k]);
+							//printf("tarea %d --> %1.0f * %1.0f\n", tareaEnviada, a[i][j], b[j][k]);
 					}
 					//printf("tarea %d del proceso %d --> %.0f\n", tareaEnviada, taskid, caux[i][k]);
 				}
@@ -347,6 +380,7 @@ int main(int argc, char* argv[]){
 			MPI_Send(&TamSubBlock, 1, MPI_INT, MASTER, mtype, MPI_COMM_WORLD);
 			/* send the final portion of C */
 			MPI_Send(&caux, TamSubBlock*N, MPI_DOUBLE, MASTER, mtype, MPI_COMM_WORLD);
+			//imprimirMatriz(caux);
 
 			tareaR++;
 		}
