@@ -7,7 +7,7 @@
  	 Marco Rolon
  	 Alcides Rivarola
 
- Copyright   : Your copyright notice
+ Licencia   : GPL
 
  DESCRIPCION
  Multiplicacion de matrices con distribucion ciclica
@@ -19,10 +19,11 @@
 #include <stdlib.h>
 #include <string.h>
 #include <math.h>
+#include <sys/time.h>
 #include "mpi.h"
 
 // Constantes
-#define N 625					/* tamanho de las matrices
+#define N 900					/* tamanho de las matrices
 							*  debe ser cuadrado perfecto
 							*/
 #define MASTER 0            /* taskid of first task */
@@ -35,45 +36,86 @@
  */
 int TamSubBlock;
 int CantTareas;
-double c[N][N];				/* result matrix C */
+//double c[N][N];				/* result matrix C */
 
-// Deberia generar los elementos de la matriz aleatoriamente
-void generarMatriz(double a[N][N], double b[N][N]) {
-	int i, j;
+typedef struct matriz{
 
-	for (i=0; i<N; i++)
-		for (j=0; j<N; j++)
-			a[i][j]= i+j;
+	int ** datos;
+	int dim;
 
-	for (i=0; i<N; i++)
-		for (j=0; j<N; j++)
-			b[i][j]= i*j;
+} matriz;
+
+matriz c;
+
+double getTime(){
+    struct timeval t;
+
+    gettimeofday(&t, NULL);
+
+    return (double)t.tv_sec + t.tv_usec * 0.000001;
 }
 
-/*
- * Imprimimos las primeras 16 columnas y filas
- */
-void imprimirMatriz(double matriz[N][N]) {
-	int i, j, tam;
+void inicializarMatrizA( matriz * pMatriz, int dim ){
 
-	printf("Se imprimen solo las primeras 16 columnas para que entre todo "
-			"en la consola\n");
+	int i, j;
 
-	if( N <= 16)
-		tam = N;
-	else
-		tam = 16;
+	pMatriz->dim = dim;
+	pMatriz->datos = ( int** )malloc( sizeof( int * )*dim );
 
 
-	for (i=0; i<tam; i++){
-		printf("\n");
-		if( (i) % TamSubBlock == 0)
-			printf("\n");
+	for( i=0; i < dim; i++ ){
+		pMatriz->datos[ i ] = ( int* )malloc( sizeof(int)*dim );
 
-		for (j=0; j<tam; j++)
-			printf("%6.0f  ", matriz[i][j]);
+		for( j=0; j < dim; j++ ){
+			pMatriz->datos[ i ][ j ] = 1;
+		}
 	}
-	printf ("\n");
+}
+
+void inicializarMatrizB( matriz * pMatriz, int dim ){
+
+	int i, j;
+
+	pMatriz->dim	= dim;
+	pMatriz->datos		= ( int** )malloc( sizeof( int * )*dim );
+
+
+	for( i=0; i < dim; i++ ){
+		pMatriz->datos[ i ] = ( int* )malloc( sizeof(int)*dim );
+
+		for( j=0; j < dim; j++ ){
+			pMatriz->datos[ i ][ j ] = 2;
+		}
+	}
+}
+
+void inicializarMatrizC( matriz * pMatriz, int dim ){
+
+	int i, columna;
+
+	pMatriz->dim	= dim;
+	pMatriz->datos = ( int** )malloc( sizeof( int * )*dim );
+
+
+	for( i=0; i < dim; i++ ){
+		pMatriz->datos[ i ] = ( int* )malloc( sizeof(int)*dim );
+
+		for( columna=0; columna < dim; columna++ ){
+			pMatriz->datos[ i ][ columna ] = 0;
+		}
+	}
+}
+
+void imprimirMatriz( matriz matrizC ){
+
+	int i, j;
+
+	for( i=0; i < matrizC.dim; i++ ){
+		for( j=0; j < matrizC.dim; j++ ){
+			printf( "%6i,", matrizC.datos[ i ][ j ] );
+		}
+		printf( "\n");
+	}
 }
 
 /*
@@ -142,12 +184,12 @@ int calcularSaltoFila(int tarea, int despFil){
 }
 
 
-void cargarResultado(double caux[N][N], int fini, int cantFilas, int cini, int cantCols) {
+void cargarResultado( matriz * pCaux, int fini, int cantFilas, int cini, int cantCols) {
     int i, j;
 
     for (i = fini; i < (fini + cantFilas); i++) {
         for (j = cini; j < (cini + cantCols); j++) {
-            c[i][j] = caux[i][j];
+            c.datos[i][j] = pCaux->datos[i][j];
         }
     }
 }
@@ -172,12 +214,15 @@ int main(int argc, char* argv[]){
 		inicioCol = 0,
 		seguir = 1,
 		i, j, k, rc;           /* misc */
+
+	double tiempoInicio, tiempoFin, tiempoTotal;
+
 	MPI_Status status ;   /* return status for receive */
 
 
-	double	a[N][N],           /* matrix A to be multiplied */
-			b[N][N],           /* matrix B to be multiplied */
-			caux[N][N];        /* result matrix C */
+	matriz a;
+	matriz b;
+	matriz caux;
 
 	rc = MPI_Init(&argc, &argv);
 	/* get the size of the process group */
@@ -189,25 +234,15 @@ int main(int argc, char* argv[]){
 		printf ("error initializing MPI and obtaining task ID info\n");
 
 	numworkers = numtasks;
+	inicializarMatrizA( &a, N );
+	inicializarMatrizB( &b, N );
+	inicializarMatrizC( &c, N );
+	inicializarMatrizC( &caux, N );
 
 	/********************** master task **********************/
 	if (taskid == MASTER){
 		printf ("Total de Procesos: %d \n", numworkers);
 		printf ("Dimension de la matriz: %d*%d\n", N, N);
-
-	     /* aqui se generan las matrices */
-	    for (i=0; i<N; i++)
-	 		for (j=0; j<N; j++)
-	 			a[i][j]= i+j;
-
-	 	for (i=0; i<N; i++)
-	 		for (j=0; j<N; j++)
-	 			b[i][j]= i*j;
-
-	 	for (i=0; i<N; i++)
-	 		for (j=0; j<N; j++)
-	 			caux[i][j]= 0;
-	 	/* fin de generacion de matrices */
 
 	 	verificarCondiciones(numworkers);
 	 	TamSubBlock = sqrt(N);
@@ -215,6 +250,9 @@ int main(int argc, char* argv[]){
 	 	inicioCol = 0;
 	    despFil = 0;			// desplazamiento
 	    tarea = 1;
+
+
+	    tiempoInicio = getTime();
 
 	    // ejecuta mientras haya tareas a enviar
 	    while( tarea <= CantTareas){
@@ -251,14 +289,14 @@ int main(int argc, char* argv[]){
 
 					// envia a cada procesos filas*col bits de datos comenzando
 					// en inicioFila
-					MPI_Send(&a[inicioFila][0], TamSubBlock*N, MPI_DOUBLE,
+					MPI_Send(&a, TamSubBlock*N, MPI_INT,
 							dest, mtype, MPI_COMM_WORLD);
 
 					tareaEnviada = tarea;
 					MPI_Send(&tareaEnviada, 1, MPI_INT, dest, mtype, MPI_COMM_WORLD);
 
 					/* envia a cada proceso la matriz B */
-					MPI_Send(&b, N*N, MPI_DOUBLE, dest, mtype, MPI_COMM_WORLD);
+					MPI_Send(&b, N*N, MPI_INT, dest, mtype, MPI_COMM_WORLD);
 					tarea++;
 				}
 				despFil = calcularSaltoFila(tarea, despFil);
@@ -268,16 +306,16 @@ int main(int argc, char* argv[]){
 			/*
 			 * Procesar la tarea del MASTER
 			 */
-			printf("Procesando tarea %d del proceso %d\n", tareaM, taskid);
+			//printf("Procesando tarea %d del proceso %d\n", tareaM, taskid);
 			for (k=inicioColM; k < inicioColM+TamSubBlock; k++){
 				for (i=inicioFilaM; i< inicioFilaM+TamSubBlock; i++){
-					caux[i][k] = 0.0;
+					caux.datos[i][k] = 0;
 					for (j=0; j<N; j++){
-						caux[i][k] = caux[i][k] + a[i][j] * b[j][k];
+						caux.datos[i][k] = caux.datos[i][k] + a.datos[i][j] * b.datos[j][k];
 					}
 				}
 			}
-			cargarResultado(caux, inicioFilaM, TamSubBlock, inicioColM, TamSubBlock);
+			cargarResultado(&caux, inicioFilaM, TamSubBlock, inicioColM, TamSubBlock);
 
 			/*
 			 * Si aun hay tareas por procesar, aguardamos los resultados de
@@ -291,13 +329,13 @@ int main(int argc, char* argv[]){
 					source = i;
 					MPI_Recv(&inicioFila, 1, MPI_INT, source, mtype,MPI_COMM_WORLD, &status);
 					MPI_Recv(&inicioCol, 1, MPI_INT, source, mtype, MPI_COMM_WORLD, &status);
-					MPI_Recv(&caux[inicioFila][0], TamSubBlock*N, MPI_DOUBLE,
+					MPI_Recv(&caux, TamSubBlock*N, MPI_INT,
 							source, mtype, MPI_COMM_WORLD, &status);
-					cargarResultado(caux, inicioFila, TamSubBlock, inicioCol, TamSubBlock);
+					cargarResultado(&caux, inicioFila, TamSubBlock, inicioCol, TamSubBlock);
 				}
 			}
 		}
-	    imprimirMatriz(c);
+	    //imprimirMatriz(c);
 	}
 
 	/********************** worker task **********************/
@@ -310,20 +348,20 @@ int main(int argc, char* argv[]){
 			MPI_Recv(&inicioFila, 1, MPI_INT, MASTER, mtype, MPI_COMM_WORLD, &status);
 			MPI_Recv(&inicioCol, 1, MPI_INT, MASTER, mtype, MPI_COMM_WORLD, &status);
 			MPI_Recv(&TamSubBlock, 1, MPI_INT, MASTER, mtype, MPI_COMM_WORLD, &status);
-			MPI_Recv(&a, TamSubBlock*N, MPI_DOUBLE, MASTER, mtype, MPI_COMM_WORLD, &status);
+			MPI_Recv(&a, TamSubBlock*N, MPI_INT, MASTER, mtype, MPI_COMM_WORLD, &status);
 			MPI_Recv(&tareaEnviada, 1, MPI_INT, MASTER, mtype, MPI_COMM_WORLD, &status);
-			MPI_Recv(&b, N*N, MPI_DOUBLE, MASTER, mtype, MPI_COMM_WORLD, &status);
+			MPI_Recv(&b, N*N, MPI_INT, MASTER, mtype, MPI_COMM_WORLD, &status);
 
 
 			/*
 			 * Multiplica y guarda los resultados en la matriz caux
 			 */
-			printf("Procesando tarea %d del proceso %d\n", tareaEnviada, taskid);
+			//printf("Procesando tarea %d del proceso %d\n", tareaEnviada, taskid);
 			for (k=inicioCol; k < inicioCol+TamSubBlock; k++){
 				for (i=0; i< TamSubBlock; i++){
-					caux[i][k] = 0.0;
+					caux.datos[i][k] = 0;
 					for (j=0; j<N; j++){
-						caux[i][k] = caux[i][k] + a[i][j] * b[j][k];
+						caux.datos[i][k] = caux.datos[i][k] + a.datos[i][j] * b.datos[j][k];
 					}
 				}
 			}
@@ -333,10 +371,16 @@ int main(int argc, char* argv[]){
 			/* Enviamos los datos al master */
 			MPI_Send(&inicioFila, 1, MPI_INT, MASTER, mtype, MPI_COMM_WORLD);
 			MPI_Send(&inicioCol, 1, MPI_INT, MASTER, mtype, MPI_COMM_WORLD);
-			MPI_Send(&caux, TamSubBlock*N, MPI_DOUBLE, MASTER, mtype, MPI_COMM_WORLD);
+			MPI_Send(&caux, TamSubBlock*N, MPI_INT, MASTER, mtype, MPI_COMM_WORLD);
 			tareaR++;
 		}
 	}
+
+
+	tiempoFin = getTime();
+	tiempoTotal = tiempoFin - tiempoInicio;
+
+	printf( "\n\nTiempo transcurrido: %.6f segundos\n", tiempoTotal);
 
 	MPI_Finalize();
 	return (MPI_SUCCESS);
