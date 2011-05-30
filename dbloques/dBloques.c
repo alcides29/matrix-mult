@@ -23,7 +23,7 @@
 #include "mpi.h"
 
 // Constantes
-#define N 900					/* tamanho de las matrices
+#define N 9					/* tamanho de las matrices
 							*  debe ser cuadrado perfecto
 							*/
 #define MASTER 0            /* taskid of first task */
@@ -36,7 +36,6 @@
  */
 int TamSubBlock;
 int CantTareas;
-//double c[N][N];				/* result matrix C */
 
 typedef struct matriz{
 
@@ -67,7 +66,7 @@ void inicializarMatrizA( matriz * pMatriz, int dim ){
 		pMatriz->datos[ i ] = ( int* )malloc( sizeof(int)*dim );
 
 		for( j=0; j < dim; j++ ){
-			pMatriz->datos[ i ][ j ] = 1;
+			pMatriz->datos[ i ][ j ] = i+j;
 		}
 	}
 }
@@ -84,7 +83,7 @@ void inicializarMatrizB( matriz * pMatriz, int dim ){
 		pMatriz->datos[ i ] = ( int* )malloc( sizeof(int)*dim );
 
 		for( j=0; j < dim; j++ ){
-			pMatriz->datos[ i ][ j ] = 2;
+			pMatriz->datos[ i ][ j ] = i*j;
 		}
 	}
 }
@@ -194,6 +193,20 @@ void cargarResultado( matriz * pCaux, int fini, int cantFilas, int cini, int can
     }
 }
 
+
+void cargarBuffer( int* buffer, matriz * pMatriz, int filaInicio, int columnaInicio){
+
+	int fila, columna;
+
+	for( fila= 0; fila < TamSubBlock; fila++ ){
+			for( columna= 0; columna < N ; columna++ ){
+				buffer[ fila*N + columna ] = pMatriz->datos[ filaInicio + fila ][ columnaInicio + columna ];
+				//printf("buffer %d", buffer[ fila*N + columna]);
+			}
+		}
+}
+
+
 int main(int argc, char* argv[]){
 
 	int	numtasks,              /* number of tasks in partition */
@@ -215,14 +228,14 @@ int main(int argc, char* argv[]){
 		seguir = 1,
 		i, j, k, rc;           /* misc */
 
-	double tiempoInicio, tiempoFin, tiempoTotal;
+	int * buffer;
+
+	double tiempoInicio = 0;
+	double tiempoFin, tiempoTotal;
 
 	MPI_Status status ;   /* return status for receive */
+	matriz a, b, caux;
 
-
-	matriz a;
-	matriz b;
-	matriz caux;
 
 	rc = MPI_Init(&argc, &argv);
 	/* get the size of the process group */
@@ -234,15 +247,18 @@ int main(int argc, char* argv[]){
 		printf ("error initializing MPI and obtaining task ID info\n");
 
 	numworkers = numtasks;
-	inicializarMatrizA( &a, N );
-	inicializarMatrizB( &b, N );
-	inicializarMatrizC( &c, N );
-	inicializarMatrizC( &caux, N );
+	buffer = (int*)malloc( sizeof(int)*N*TamSubBlock);
+
 
 	/********************** master task **********************/
 	if (taskid == MASTER){
 		printf ("Total de Procesos: %d \n", numworkers);
 		printf ("Dimension de la matriz: %d*%d\n", N, N);
+
+		inicializarMatrizA( &a, N );
+		inicializarMatrizB( &b, N );
+		inicializarMatrizC( &c, N );
+		inicializarMatrizC( &caux, N );
 
 	 	verificarCondiciones(numworkers);
 	 	TamSubBlock = sqrt(N);
@@ -280,23 +296,18 @@ int main(int argc, char* argv[]){
 					// indica el valor despFil en donde cada proceso empezara
 					// a mirar los datos en la matriz A
 					inicioFila = despFil;
-					MPI_Send(&inicioFila, 1, MPI_INT, dest, mtype, MPI_COMM_WORLD);
 
+					MPI_Send(&inicioFila, 1, MPI_INT, dest, mtype, MPI_COMM_WORLD);
 					MPI_Send(&inicioCol, 1, MPI_INT, dest, mtype, MPI_COMM_WORLD);
 
-					// Se envia el numero de filas que tiene cada tarea
-					MPI_Send(&TamSubBlock, 1, MPI_INT, dest, mtype, MPI_COMM_WORLD);
-
-					// envia a cada procesos filas*col bits de datos comenzando
-					// en inicioFila
-					MPI_Send(&a, TamSubBlock*N, MPI_INT,
-							dest, mtype, MPI_COMM_WORLD);
+					cargarBuffer( buffer, &a, inicioFila, inicioCol);
+					MPI_Send(buffer, TamSubBlock*N, MPI_INT, dest, mtype, MPI_COMM_WORLD);
 
 					tareaEnviada = tarea;
 					MPI_Send(&tareaEnviada, 1, MPI_INT, dest, mtype, MPI_COMM_WORLD);
 
 					/* envia a cada proceso la matriz B */
-					MPI_Send(&b, N*N, MPI_INT, dest, mtype, MPI_COMM_WORLD);
+					MPI_Send(buffer, N*N, MPI_INT, dest, mtype, MPI_COMM_WORLD);
 					tarea++;
 				}
 				despFil = calcularSaltoFila(tarea, despFil);
@@ -329,13 +340,12 @@ int main(int argc, char* argv[]){
 					source = i;
 					MPI_Recv(&inicioFila, 1, MPI_INT, source, mtype,MPI_COMM_WORLD, &status);
 					MPI_Recv(&inicioCol, 1, MPI_INT, source, mtype, MPI_COMM_WORLD, &status);
-					MPI_Recv(&caux, TamSubBlock*N, MPI_INT,
-							source, mtype, MPI_COMM_WORLD, &status);
-					cargarResultado(&caux, inicioFila, TamSubBlock, inicioCol, TamSubBlock);
+					//MPI_Recv(&caux.datos[inicioFila][0], TamSubBlock*N, MPI_INT, source, mtype, MPI_COMM_WORLD, &status);
+					//cargarResultado(&caux, inicioFila, TamSubBlock, inicioCol, TamSubBlock);
 				}
 			}
 		}
-	    //imprimirMatriz(c);
+	    imprimirMatriz(c);
 	}
 
 	/********************** worker task **********************/
@@ -347,8 +357,7 @@ int main(int argc, char* argv[]){
 
 			MPI_Recv(&inicioFila, 1, MPI_INT, MASTER, mtype, MPI_COMM_WORLD, &status);
 			MPI_Recv(&inicioCol, 1, MPI_INT, MASTER, mtype, MPI_COMM_WORLD, &status);
-			MPI_Recv(&TamSubBlock, 1, MPI_INT, MASTER, mtype, MPI_COMM_WORLD, &status);
-			MPI_Recv(&a, TamSubBlock*N, MPI_INT, MASTER, mtype, MPI_COMM_WORLD, &status);
+			MPI_Recv(&buffer, TamSubBlock*N, MPI_INT, MASTER, mtype, MPI_COMM_WORLD, &status);
 			MPI_Recv(&tareaEnviada, 1, MPI_INT, MASTER, mtype, MPI_COMM_WORLD, &status);
 			MPI_Recv(&b, N*N, MPI_INT, MASTER, mtype, MPI_COMM_WORLD, &status);
 
@@ -361,7 +370,7 @@ int main(int argc, char* argv[]){
 				for (i=0; i< TamSubBlock; i++){
 					caux.datos[i][k] = 0;
 					for (j=0; j<N; j++){
-						caux.datos[i][k] = caux.datos[i][k] + a.datos[i][j] * b.datos[j][k];
+						caux.datos[i][k] += buffer[ i*N + j] * b.datos[j][k];
 					}
 				}
 			}
@@ -371,7 +380,7 @@ int main(int argc, char* argv[]){
 			/* Enviamos los datos al master */
 			MPI_Send(&inicioFila, 1, MPI_INT, MASTER, mtype, MPI_COMM_WORLD);
 			MPI_Send(&inicioCol, 1, MPI_INT, MASTER, mtype, MPI_COMM_WORLD);
-			MPI_Send(&caux, TamSubBlock*N, MPI_INT, MASTER, mtype, MPI_COMM_WORLD);
+			//MPI_Send(&caux.datos, TamSubBlock*N, MPI_INT, MASTER, mtype, MPI_COMM_WORLD);
 			tareaR++;
 		}
 	}
